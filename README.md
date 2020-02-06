@@ -34,21 +34,6 @@ use io
 "Hello, World!" > io.stdout
 ```
 
-#### Fibonacci
-
-```river
-#!/bin/env river
-use io, parse
-
-fibo(n) > {
-  n == 0 ? return 0
-  n == 1 ? return 1
-  n > return fibo(n - 1) + fibo(n - 2)
-}
-
-io.stdin > parse.int > fibo > io.stdout
-```
-
 #### Data encoding/decoding (CSV to JSON)
 ```
 #!/bin/env river
@@ -88,18 +73,21 @@ socket > decode.bson > encode.json > io.stdout
 use io, encode, decode, net
 
 # Bind a TCP server to port 3000
-("0.0.0.0", 3000) > net.tcp.bind >= server
+"0.0.0.0:3000" > net.tcp.bind >= server
 
 # Create a handler to:
 # 1. Log the peer's IP to stdout
 # 2. Echo the stream back to the client
-handler(peer_sock) > {
-  peer_sock.addr > io.stdout
+peer_sock => (
+  "Connection from: " + peer_sock.addr > io.stdout
+  # Echo data in the socket back to peer
   peer_sock > peer_sock
-}
+) >= handler
 
 # Pass the incoming connections (asyncronously) to our handler
 server | handler
 
 "Binded to " + server.local_addr > io.stdout
+
+server.run
 ```
