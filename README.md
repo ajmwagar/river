@@ -52,6 +52,7 @@ use io
 
 #### TCP/UDP sockets
 
+##### Client
 ```
 #!/bin/river
 use io, encode, decode, net
@@ -65,8 +66,8 @@ io.stdin > decode.json > encode.bson > socket
 # Read response from socket, convert to JSON, and print to stdout
 socket > decode.bson > encode.json > io.stdout
 ```
-> TCP Client
 
+##### Server
 ```
 #!/bin/river
 use io, encode, decode, net
@@ -87,4 +88,3 @@ server | handler
 
 "Binded to " + server.local_addr > io.stdout
 ```
-> TCP Server
