@@ -1,0 +1,12 @@
+#!/bin/env river
+use io, encode, decode, net
+
+# Connect to a TCP server at 0.0.0.0:3000
+("0.0.0.0", 3000) > net.tcp.connect >= socket
+
+# Convert stdin to bson and send over socket
+io.stdin > decode.json > encode.bson > socket
+
+# Read response from socket, convert to JSON, and print to stdout
+socket > decode.bson > encode.json > io.stdout
+

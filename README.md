@@ -28,7 +28,7 @@
 #### Hello, World!
 
 ```river
-#!/bin/river
+#!/bin/env river
 use io
 
 "Hello, World!" > io.stdout
@@ -37,7 +37,7 @@ use io
 #### Fibonacci
 
 ```river
-#!/bin/bash
+#!/bin/env river
 use io, parse
 
 fibo(n) > {
@@ -51,7 +51,7 @@ io.stdin > parse.int > fibo > io.stdout
 
 #### Data encoding/decoding (CSV to JSON)
 ```
-#!/bin/river
+#!/bin/env river
 use io, encode, decode
 
 io.stdin > decode.csv > encode.json > io.stdout
@@ -60,7 +60,7 @@ io.stdin > decode.csv > encode.json > io.stdout
 #### CLI Access
 
 ```
-#!/bin/river
+#!/bin/env river
 use io
 `ls /home/$USER/` > `grep main.ri` > io.stdout
 ```
@@ -69,7 +69,7 @@ use io
 
 ##### Client
 ```
-#!/bin/river
+#!/bin/env river
 use io, encode, decode, net
 
 # Connect to a TCP server at 0.0.0.0:3000
@@ -84,7 +84,7 @@ socket > decode.bson > encode.json > io.stdout
 
 ##### Server
 ```
-#!/bin/river
+#!/bin/env river
 use io, encode, decode, net
 
 # Bind a TCP server to port 3000

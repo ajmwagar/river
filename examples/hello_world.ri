@@ -1,0 +1,4 @@
+#!/bin/env river
+use io
+
+"Hello, World!" > io.stdout
