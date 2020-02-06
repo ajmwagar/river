@@ -42,6 +42,14 @@ use io, encode, decode
 io.stdin > decode.csv > encode.json > io.stdout
 ```
 
+#### CLI Access
+
+```
+#!/bin/river
+use io
+`ls /home/$USER/` > `grep main.ri` > io.stdout
+```
+
 #### TCP/UDP sockets
 
 ```
