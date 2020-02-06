@@ -23,6 +23,10 @@
 - Easy encoding/decoding between formats
 - Easy async command line access
 
+## Documentation
+
+For now, see the [Wiki](https://github.com/ajmwagar/river/wiki/Concepts)
+
 ## Examples
 
 #### Hello, World!
