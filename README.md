@@ -34,6 +34,21 @@ use io
 "Hello, World!" > io.stdout
 ```
 
+#### Fibonacci
+
+```river
+#!/bin/bash
+use io, parse
+
+fibo(n) > {
+  n == 0 ? return 0
+  n == 1 ? return 1
+  n > return fibo(n - 1) + fibo(n - 2)
+}
+
+io.stdin > parse.int > fibo > io.stdout
+```
+
 #### Data encoding/decoding (CSV to JSON)
 ```
 #!/bin/river
