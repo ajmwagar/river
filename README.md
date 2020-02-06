@@ -4,6 +4,8 @@
   <p><strong>A scripting language for data streams.</strong></p>
 <p>
   
+ **WIP** This language is theroretical at this point. I hope it'll become a reality soon.
+  
 [![GitHub Actions](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Fajmwagar%2Fart%2Fbadge&label=build&logo=none)](https://actions-badge.atrox.dev/ajmwagar/art/goto)
 [![crates.io](https://meritbadge.herokuapp.com/[CRATE_NAME])](https://crates.io/crates/[CRATE_NAME])
 [![Documentation](https://docs.rs/[CRATE_NAME]/badge.svg)](https://docs.rs/[CRATE_NAME])
@@ -40,3 +42,35 @@ use io, encode, decode
 io.stdin > decode.csv > encode.json > io.stdout
 ```
 
+#### TCP/UDP sockets
+
+```
+#!/bin/river
+use io, encode, decode, net
+
+# Connect to a TCP server at 0.0.0.0:3000
+("0.0.0.0", 3000) > net.tcp.connect >= socket
+
+# Convert stdin to bson and send over socket
+io.stdin > decode.json > encode.bson > socket
+
+# Read response from socket, convert to JSON, and print to stdout
+socket > decode.bson > encode.json > io.stdout
+```
+> TCP Client
+
+```
+#!/bin/river
+use io, encode, decode, net
+
+# Bind a TCP server to port 3000
+("0.0.0.0", 3000) > net.tcp.bind >= server
+
+# Iterate over the incoming connections (asyncronously)
+# Echo the stream back to the client
+# Log the peer's IP to stdout
+server | (peer_sock, stream) > stream > peer_sock > peer_sock.addr > io.stdout
+
+"Binded to " + server.local_addr > io.stdout
+```
+> TCP Server
