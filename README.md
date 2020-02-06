@@ -66,10 +66,16 @@ use io, encode, decode, net
 # Bind a TCP server to port 3000
 ("0.0.0.0", 3000) > net.tcp.bind >= server
 
-# Iterate over the incoming connections (asyncronously)
-# Echo the stream back to the client
-# Log the peer's IP to stdout
-server | (peer_sock, stream) > stream > peer_sock > peer_sock.addr > io.stdout
+# Create a handler to:
+# 1. Log the peer's IP to stdout
+# 2. Echo the stream back to the client
+handler(peer_sock) > {
+  peer_sock.addr > io.stdout
+  peer_sock > peer_sock
+}
+
+# Pass the incoming connections (asyncronously) to our handler
+server | handler
 
 "Binded to " + server.local_addr > io.stdout
 ```
