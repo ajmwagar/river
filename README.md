@@ -78,7 +78,7 @@ use io, encode, decode, net
 # Create a handler to:
 # 1. Log the peer's IP to stdout
 # 2. Echo the stream back to the client
-peer_sock => (
+peer_sock :> (
   "Connection from: " + peer_sock.addr > io.stdout
   # Echo data in the socket back to peer
   peer_sock > peer_sock
