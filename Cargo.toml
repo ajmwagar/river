@@ -1,2 +1,3 @@
 [workspace]
-members = ["river", "river-parser", "river-std", "river-rt"]
+resolver = "2"
+members = ["river", "river-parser", "river-std", "river-rt", "river-eval"]
