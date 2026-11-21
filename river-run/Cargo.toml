@@ -7,7 +7,7 @@ description = "A small closed evaluator and CLI for River S-expressions"
 
 [dependencies]
 anyhow = "1"
-fungos-records = { path = "../../records" }
+fungos-records = { git = "https://github.com/mycelium-linux/records.git", rev = "1fa03a239b6191f61ecf9d5f9c5284ba9045a1cd" }
 river-eval = { path = "../river-eval" }
 serde_json = "1"
 
