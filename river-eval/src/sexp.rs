@@ -36,6 +36,8 @@ impl Value {
     pub fn as_list(&self) -> Option<&[Value]> {
         match self {
             Self::List(values) => Some(values),
+            // Lisp's empty list and nil are the same value.
+            Self::Nil => Some(&[]),
             _ => None,
         }
     }
@@ -158,6 +160,11 @@ impl<'a> Parser<'a> {
         match byte {
             b'(' => self.parse_list(),
             b')' => Err(self.error("unexpected `)`")),
+            b'\'' => {
+                self.pos += 1;
+                let value = self.parse_value()?;
+                Ok(Value::List(vec![Value::Symbol("quote".to_string()), value]))
+            }
             b'"' => self.parse_string(),
             _ => self.parse_atom(),
         }
@@ -174,7 +181,11 @@ impl<'a> Parser<'a> {
             };
             if byte == b')' {
                 self.pos += 1;
-                return Ok(Value::List(values));
+                return Ok(if values.is_empty() {
+                    Value::Nil
+                } else {
+                    Value::List(values)
+                });
             }
             values.push(self.parse_value()?);
         }

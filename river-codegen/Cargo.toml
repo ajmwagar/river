@@ -1,0 +1,16 @@
+[package]
+name = "river-codegen"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Compile River's typed numeric core to WebAssembly"
+
+[dependencies]
+anyhow = "1"
+river-eval = { path = "../river-eval" }
+wasm-encoder = "0.263"
+
+[dev-dependencies]
+river-eval = { path = "../river-eval" }
+river-run = { path = "../river-run" }
+wasmtime = "50"

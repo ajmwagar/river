@@ -97,3 +97,11 @@
 
 (defun now-ms ()
   (field (value (soil:time/wall-clock)) :unix-ms))
+
+; McCarthy-style accessors.
+(defun caar (x) (car (car x)))
+(defun cadr (x) (car (cdr x)))
+(defun cdar (x) (cdr (car x)))
+(defun caddr (x) (car (cdr (cdr x))))
+(defun cadar (x) (car (cdr (car x))))
+(defun caddar (x) (car (cdr (cdr (car x)))))

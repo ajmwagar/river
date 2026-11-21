@@ -320,6 +320,37 @@ impl Runtime {
                             .ok_or_else(|| anyhow!("apply: unknown function `{name}`"))?;
                         self.call_function(&function, arguments)
                     }
+                    "atom" => {
+                        let value = self.eval(require(items, 1, "atom")?, env)?;
+                        Ok(if matches!(value, Value::List(_)) {
+                            Value::Nil
+                        } else {
+                            Value::Symbol("t".to_string())
+                        })
+                    }
+                    "eq" => {
+                        let left = self.eval(require(items, 1, "eq")?, env)?;
+                        let right = self.eval(require(items, 2, "eq")?, env)?;
+                        Ok(if left == right {
+                            Value::Symbol("t".to_string())
+                        } else {
+                            Value::Nil
+                        })
+                    }
+                    "car" => {
+                        let value = self.eval(require(items, 1, "car")?, env)?;
+                        Ok(match value.as_list() {
+                            Some([first, ..]) => first.clone(),
+                            _ => Value::Nil,
+                        })
+                    }
+                    "cdr" => {
+                        let value = self.eval(require(items, 1, "cdr")?, env)?;
+                        Ok(match value.as_list() {
+                            Some([_, rest @ ..]) if !rest.is_empty() => Value::List(rest.to_vec()),
+                            _ => Value::Nil,
+                        })
+                    }
                     "string-contains?" => {
                         let haystack = self.eval(require(items, 1, "string-contains?")?, env)?;
                         let needle = self.eval(require(items, 2, "string-contains?")?, env)?;
