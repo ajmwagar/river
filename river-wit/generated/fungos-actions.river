@@ -1,0 +1,80 @@
+(define-package "fungos:actions@1.0.0" :base "fungos:actions" :version "1.0.0")
+
+(define-enum fungos:actions/effect read write external)
+
+(define-enum fungos:actions/idempotency idempotent keyed unsafe)
+
+(define-enum fungos:actions/approval none operator destructive)
+
+(define-record fungos:actions/descriptor
+  (id string)
+  (version u32)
+  (summary string)
+  (effect fungos:actions/effect)
+  (idempotency fungos:actions/idempotency)
+  (approval fungos:actions/approval)
+  (input-schema string)
+  (output-schema string)
+  (phases (list string))
+  (provider (option string))
+  (catalog-revision (option string))
+  (state-revision (option string))
+)
+
+(define-record fungos:actions/call
+  (action string)
+  (version u32)
+  (input string)
+  (idempotency-key (option string))
+)
+
+(define-record fungos:actions/receipt
+  (action string)
+  (version u32)
+  (output string)
+  (replayed bool)
+)
+
+(define-enum fungos:actions/error denied unknown-action unsupported-version invalid approval-required unsafe-retry over-budget unavailable io)
+
+(define-function fungos:actions/catalog
+  ()
+  -> (result (list fungos:actions/descriptor) fungos:actions/error)
+  :grant "fungos:actions" :version "1.0.0")
+
+(define-function fungos:actions/invoke
+  ((call fungos:actions/call))
+  -> (result fungos:actions/receipt fungos:actions/error)
+  :grant "fungos:actions" :version "1.0.0")
+
+(define-alias fungos:actions/catalog.approval fungos:actions/catalog.approval)
+
+(define-alias fungos:actions/catalog.effect fungos:actions/catalog.effect)
+
+(define-alias fungos:actions/catalog.error fungos:actions/catalog.error)
+
+(define-alias fungos:actions/catalog.idempotency fungos:actions/catalog.idempotency)
+
+(define-record fungos:actions/catalog.action
+  (id string)
+  (label string)
+  (description string)
+  (shortcut (option string))
+  (input-schema string)
+  (requires-input bool)
+  (effect fungos:actions/catalog.effect)
+  (idempotency fungos:actions/catalog.idempotency)
+  (approval fungos:actions/catalog.approval)
+  (available bool)
+  (reason (option string))
+  (phases (list string))
+  (provider (option string))
+  (catalog-revision (option string))
+  (state-revision (option string))
+)
+
+(define-function fungos:actions/catalog.list-actions
+  ()
+  -> (result (list fungos:actions/catalog.action) fungos:actions/catalog.error)
+  :grant "fungos:actions" :version "1.0.0")
+

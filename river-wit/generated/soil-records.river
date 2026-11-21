@@ -1,0 +1,84 @@
+(define-package "soil:records@0.1.0" :base "soil:records" :version "0.1.0")
+
+(define-record soil:records/key
+  (collection string)
+  (id string)
+)
+
+(define-record soil:records/entry
+  (key soil:records/key)
+  (schema string)
+  (revision u64)
+  (updated-at-ms u64)
+  (origin string)
+  (deleted bool)
+  (body (list u8))
+)
+
+(define-record soil:records/page
+  (entries (list soil:records/entry))
+  (next (option string))
+)
+
+(define-record soil:records/packed-page
+  (entries (list u8))
+  (next (option string))
+)
+
+(define-record soil:records/apply-result
+  (applied u32)
+  (skipped u32)
+)
+
+(define-record soil:records/version
+  (revision u64)
+  (origin string)
+)
+
+(define-record soil:records/cas-result
+  (applied bool)
+  (entry soil:records/entry)
+)
+
+(define-enum soil:records/error denied not-found over-budget invalid stale io unsupported)
+
+(define-function soil:records/get
+  ((key soil:records/key))
+  -> (result soil:records/entry soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/scan
+  ((collection string) (cursor (option string)) (limit u32))
+  -> (result soil:records/page soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/scan-packed
+  ((collection string) (cursor (option string)) (limit u32))
+  -> (result soil:records/packed-page soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/upsert
+  ((entry soil:records/entry))
+  -> (result soil:records/entry soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/compare-and-swap
+  ((key soil:records/key) (expected (option soil:records/version)) (entry soil:records/entry))
+  -> (result soil:records/cas-result soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/delete
+  ((key soil:records/key))
+  -> (result unit soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/changes
+  ((since (option string)) (limit u32))
+  -> (result soil:records/page soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+
+(define-function soil:records/apply
+  ((entries (list soil:records/entry)))
+  -> (result soil:records/apply-result soil:records/error)
+  :grant "soil:records" :version "0.1.0")
+

@@ -1,0 +1,32 @@
+(define-package "soil:time@1.1.0" :base "soil:time" :version "1.1.0")
+
+(define-enum soil:time/error denied not-ready)
+
+(define-record soil:time/date-time
+  (unix-ms u64)
+  (offset-minutes s32)
+  (year u32)
+  (month u8)
+  (day u8)
+  (hour u8)
+  (minute u8)
+  (second u8)
+  (weekday u8)
+  (zone (option string))
+)
+
+(define-function soil:time/monotonic-ms
+  ()
+  -> (result u64 soil:time/error)
+  :grant "soil:time" :version "1.1.0")
+
+(define-function soil:time/wall-clock
+  ()
+  -> (result soil:time/date-time soil:time/error)
+  :grant "soil:time" :version "1.1.0")
+
+(define-function soil:time/tick
+  ((timeout-ms u32))
+  -> (result (option u64) soil:time/error)
+  :grant "soil:time" :version "1.1.0")
+

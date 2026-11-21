@@ -1,0 +1,97 @@
+(define-package "soil:ble@1.2.0" :base "soil:ble" :version "1.2.0")
+
+(define-alias soil:ble/types.device-handle u32)
+
+(define-alias soil:ble/types.link u32)
+
+(define-record soil:ble/types.device
+  (handle soil:ble/types.device-handle)
+  (name (option string))
+  (rssi (option s16))
+  (device-id (option string))
+)
+
+(define-record soil:ble/types.characteristic
+  (uuid string)
+  (readable bool)
+  (writable bool)
+  (notifiable bool)
+)
+
+(define-record soil:ble/types.service
+  (uuid string)
+  (characteristics (list soil:ble/types.characteristic))
+)
+
+(define-record soil:ble/types.notification
+  (char-uuid string)
+  (data (list u8))
+)
+
+(define-variant soil:ble/types.event
+  (notification soil:ble/types.notification)
+  (disconnected string)
+)
+
+(define-alias soil:ble/device soil:ble/device)
+
+(define-alias soil:ble/device-handle soil:ble/device-handle)
+
+(define-alias soil:ble/link soil:ble/link)
+
+(define-alias soil:ble/service soil:ble/service)
+
+(define-alias soil:ble/event soil:ble/event)
+
+(define-enum soil:ble/error denied not-found not-connected leased timeout over-budget not-ready invalid io)
+
+(define-function soil:ble/scan
+  ((timeout-ms u32))
+  -> (result (list soil:ble/device) soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/max-links
+  ()
+  -> u32
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/connect
+  ((device soil:ble/device-handle))
+  -> (result soil:ble/link soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/disconnect
+  ((link soil:ble/link))
+  -> (result unit soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/claim
+  ((device soil:ble/device-handle) (device-id string))
+  -> (result unit soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/services
+  ((link soil:ble/link))
+  -> (result (list soil:ble/service) soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/read
+  ((link soil:ble/link) (char-uuid string) (max-bytes u32))
+  -> (result (list u8) soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/write
+  ((link soil:ble/link) (char-uuid string) (data (list u8)))
+  -> (result unit soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/subscribe
+  ((link soil:ble/link) (char-uuid string))
+  -> (result unit soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
+(define-function soil:ble/next-event
+  ((link soil:ble/link) (timeout-ms u32))
+  -> (result (option soil:ble/event) soil:ble/error)
+  :grant "soil:ble" :version "1.2.0")
+
