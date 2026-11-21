@@ -1,0 +1,42 @@
+(define-package "soil:unibus@0.1.0" :base "soil:unibus" :version "0.1.0")
+
+(define-record soil:unibus/bus.frame
+  (kind string)
+  (producer string)
+  (issued-at-ms u64)
+  (body (list u8))
+)
+
+(define-record soil:unibus/bus.page
+  (frames (list soil:unibus/bus.frame))
+  (next (option string))
+)
+
+(define-record soil:unibus/bus.receipt
+  (request-id string)
+)
+
+(define-enum soil:unibus/bus.error denied invalid over-budget stale unavailable)
+
+(define-capability soil:unibus/bus.poll
+  :interface "soil:unibus"
+  :function "poll"
+  :grant "soil:unibus"
+  :version "0.1.0"
+  :params ((kinds (list string)) (cursor (option string)) (limit u32))
+  :result (result soil:unibus/bus.page soil:unibus/bus.error))
+
+(defun soil:unibus/bus.poll (kinds cursor limit)
+  (host-call "soil:unibus" "poll" (list kinds cursor limit)))
+
+(define-capability soil:unibus/bus.publish
+  :interface "soil:unibus"
+  :function "publish"
+  :grant "soil:unibus"
+  :version "0.1.0"
+  :params ((kind string) (body (list u8)) (destination (option string)) (ttl-ms u64))
+  :result (result soil:unibus/bus.receipt soil:unibus/bus.error))
+
+(defun soil:unibus/bus.publish (kind body destination ttl-ms)
+  (host-call "soil:unibus" "publish" (list kind body destination ttl-ms)))
+

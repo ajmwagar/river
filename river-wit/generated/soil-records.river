@@ -1,0 +1,132 @@
+(define-package "soil:records@0.1.0" :base "soil:records" :version "0.1.0")
+
+(define-record soil:records/key
+  (collection string)
+  (id string)
+)
+
+(define-record soil:records/entry
+  (key soil:records/key)
+  (schema string)
+  (revision u64)
+  (updated-at-ms u64)
+  (origin string)
+  (deleted bool)
+  (body (list u8))
+)
+
+(define-record soil:records/page
+  (entries (list soil:records/entry))
+  (next (option string))
+)
+
+(define-record soil:records/packed-page
+  (entries (list u8))
+  (next (option string))
+)
+
+(define-record soil:records/apply-result
+  (applied u32)
+  (skipped u32)
+)
+
+(define-record soil:records/version
+  (revision u64)
+  (origin string)
+)
+
+(define-record soil:records/cas-result
+  (applied bool)
+  (entry soil:records/entry)
+)
+
+(define-enum soil:records/error denied not-found over-budget invalid stale io unsupported)
+
+(define-capability soil:records/get
+  :interface "soil:records"
+  :function "get"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((key soil:records/key))
+  :result (result soil:records/entry soil:records/error))
+
+(defun soil:records/get (key)
+  (host-call "soil:records" "get" (list key)))
+
+(define-capability soil:records/scan
+  :interface "soil:records"
+  :function "scan"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((collection string) (cursor (option string)) (limit u32))
+  :result (result soil:records/page soil:records/error))
+
+(defun soil:records/scan (collection cursor limit)
+  (host-call "soil:records" "scan" (list collection cursor limit)))
+
+(define-capability soil:records/scan-packed
+  :interface "soil:records"
+  :function "scan-packed"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((collection string) (cursor (option string)) (limit u32))
+  :result (result soil:records/packed-page soil:records/error))
+
+(defun soil:records/scan-packed (collection cursor limit)
+  (host-call "soil:records" "scan-packed" (list collection cursor limit)))
+
+(define-capability soil:records/upsert
+  :interface "soil:records"
+  :function "upsert"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((entry soil:records/entry))
+  :result (result soil:records/entry soil:records/error))
+
+(defun soil:records/upsert (entry)
+  (host-call "soil:records" "upsert" (list entry)))
+
+(define-capability soil:records/compare-and-swap
+  :interface "soil:records"
+  :function "compare-and-swap"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((key soil:records/key) (expected (option soil:records/version)) (entry soil:records/entry))
+  :result (result soil:records/cas-result soil:records/error))
+
+(defun soil:records/compare-and-swap (key expected entry)
+  (host-call "soil:records" "compare-and-swap" (list key expected entry)))
+
+(define-capability soil:records/delete
+  :interface "soil:records"
+  :function "delete"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((key soil:records/key))
+  :result (result unit soil:records/error))
+
+(defun soil:records/delete (key)
+  (host-call "soil:records" "delete" (list key)))
+
+(define-capability soil:records/changes
+  :interface "soil:records"
+  :function "changes"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((since (option string)) (limit u32))
+  :result (result soil:records/page soil:records/error))
+
+(defun soil:records/changes (since limit)
+  (host-call "soil:records" "changes" (list since limit)))
+
+(define-capability soil:records/apply
+  :interface "soil:records"
+  :function "apply"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((entries (list soil:records/entry)))
+  :result (result soil:records/apply-result soil:records/error))
+
+(defun soil:records/apply (entries)
+  (host-call "soil:records" "apply" (list entries)))
+

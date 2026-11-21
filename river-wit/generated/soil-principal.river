@@ -1,0 +1,45 @@
+(define-package "soil:principal@0.1.0" :base "soil:principal" :version "0.1.0")
+
+(define-enum soil:principal/kind human agent service)
+
+(define-enum soil:principal/error denied not-ready stale invalid unavailable)
+
+(define-record soil:principal/identity
+  (actor string)
+  (kind soil:principal/kind)
+  (display-name (option string))
+  (device (option string))
+  (teams (list string))
+  (roles (list string))
+  (generation u64)
+)
+
+(define-record soil:principal/signing-key-info
+  (algorithm string)
+  (fingerprint string)
+  (reference string)
+  (generation u64)
+)
+
+(define-capability soil:principal/current
+  :interface "soil:principal"
+  :function "current"
+  :grant "soil:principal"
+  :version "0.1.0"
+  :params ()
+  :result (result soil:principal/identity soil:principal/error))
+
+(defun soil:principal/current ()
+  (host-call "soil:principal" "current" nil))
+
+(define-capability soil:principal/signing-key
+  :interface "soil:principal"
+  :function "signing-key"
+  :grant "soil:principal"
+  :version "0.1.0"
+  :params ()
+  :result (result (option soil:principal/signing-key-info) soil:principal/error))
+
+(defun soil:principal/signing-key ()
+  (host-call "soil:principal" "signing-key" nil))
+

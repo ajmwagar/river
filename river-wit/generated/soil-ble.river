@@ -1,0 +1,157 @@
+(define-package "soil:ble@1.2.0" :base "soil:ble" :version "1.2.0")
+
+(define-alias soil:ble/types.device-handle u32)
+
+(define-alias soil:ble/types.link u32)
+
+(define-record soil:ble/types.device
+  (handle soil:ble/types.device-handle)
+  (name (option string))
+  (rssi (option s16))
+  (device-id (option string))
+)
+
+(define-record soil:ble/types.characteristic
+  (uuid string)
+  (readable bool)
+  (writable bool)
+  (notifiable bool)
+)
+
+(define-record soil:ble/types.service
+  (uuid string)
+  (characteristics (list soil:ble/types.characteristic))
+)
+
+(define-record soil:ble/types.notification
+  (char-uuid string)
+  (data (list u8))
+)
+
+(define-variant soil:ble/types.event
+  (notification soil:ble/types.notification)
+  (disconnected string)
+)
+
+(define-alias soil:ble/device soil:ble/device)
+
+(define-alias soil:ble/device-handle soil:ble/device-handle)
+
+(define-alias soil:ble/link soil:ble/link)
+
+(define-alias soil:ble/service soil:ble/service)
+
+(define-alias soil:ble/event soil:ble/event)
+
+(define-enum soil:ble/error denied not-found not-connected leased timeout over-budget not-ready invalid io)
+
+(define-capability soil:ble/scan
+  :interface "soil:ble"
+  :function "scan"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((timeout-ms u32))
+  :result (result (list soil:ble/device) soil:ble/error))
+
+(defun soil:ble/scan (timeout-ms)
+  (host-call "soil:ble" "scan" (list timeout-ms)))
+
+(define-capability soil:ble/max-links
+  :interface "soil:ble"
+  :function "max-links"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ()
+  :result u32)
+
+(defun soil:ble/max-links ()
+  (host-call "soil:ble" "max-links" nil))
+
+(define-capability soil:ble/connect
+  :interface "soil:ble"
+  :function "connect"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((device soil:ble/device-handle))
+  :result (result soil:ble/link soil:ble/error))
+
+(defun soil:ble/connect (device)
+  (host-call "soil:ble" "connect" (list device)))
+
+(define-capability soil:ble/disconnect
+  :interface "soil:ble"
+  :function "disconnect"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((link soil:ble/link))
+  :result (result unit soil:ble/error))
+
+(defun soil:ble/disconnect (link)
+  (host-call "soil:ble" "disconnect" (list link)))
+
+(define-capability soil:ble/claim
+  :interface "soil:ble"
+  :function "claim"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((device soil:ble/device-handle) (device-id string))
+  :result (result unit soil:ble/error))
+
+(defun soil:ble/claim (device device-id)
+  (host-call "soil:ble" "claim" (list device device-id)))
+
+(define-capability soil:ble/services
+  :interface "soil:ble"
+  :function "services"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((link soil:ble/link))
+  :result (result (list soil:ble/service) soil:ble/error))
+
+(defun soil:ble/services (link)
+  (host-call "soil:ble" "services" (list link)))
+
+(define-capability soil:ble/read
+  :interface "soil:ble"
+  :function "read"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((link soil:ble/link) (char-uuid string) (max-bytes u32))
+  :result (result (list u8) soil:ble/error))
+
+(defun soil:ble/read (link char-uuid max-bytes)
+  (host-call "soil:ble" "read" (list link char-uuid max-bytes)))
+
+(define-capability soil:ble/write
+  :interface "soil:ble"
+  :function "write"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((link soil:ble/link) (char-uuid string) (data (list u8)))
+  :result (result unit soil:ble/error))
+
+(defun soil:ble/write (link char-uuid data)
+  (host-call "soil:ble" "write" (list link char-uuid data)))
+
+(define-capability soil:ble/subscribe
+  :interface "soil:ble"
+  :function "subscribe"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((link soil:ble/link) (char-uuid string))
+  :result (result unit soil:ble/error))
+
+(defun soil:ble/subscribe (link char-uuid)
+  (host-call "soil:ble" "subscribe" (list link char-uuid)))
+
+(define-capability soil:ble/next-event
+  :interface "soil:ble"
+  :function "next-event"
+  :grant "soil:ble"
+  :version "1.2.0"
+  :params ((link soil:ble/link) (timeout-ms u32))
+  :result (result (option soil:ble/event) soil:ble/error))
+
+(defun soil:ble/next-event (link timeout-ms)
+  (host-call "soil:ble" "next-event" (list link timeout-ms)))
+
