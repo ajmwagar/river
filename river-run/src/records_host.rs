@@ -265,7 +265,7 @@ impl Host for SoilRecordsHost {
                 let key = args.first().ok_or_else(|| "get needs a key".to_string())?;
                 let (collection, id) = parse_key(key)?;
                 let namespace = self.namespace(&collection, false)?;
-                Ok(match self.get_entry(&namespace, &id)? {
+                Ok(match self.get_entry(namespace, &id)? {
                     Some(entry) => ok(entry),
                     None => err("not-found"),
                 })

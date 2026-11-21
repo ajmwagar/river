@@ -192,6 +192,7 @@ pub fn generate(path: impl AsRef<Path>) -> Result<Generated> {
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn write_capability(
     sexp: &mut String,
     capability_name: &str,
