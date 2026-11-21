@@ -3,7 +3,7 @@ use std::path::Path;
 use river_wit::generate;
 
 fn generated() -> river_wit::Generated {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../soil/wit/soil-records.wit");
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/soil-records.wit");
     generate(path).expect("generate soil:records")
 }
 
