@@ -1,0 +1,12 @@
+; Numeric-core sample. Compile with:
+;   riverc examples/numeric.river
+(defun add (a b)
+  (+ a b))
+
+(defun classify (charging linked stale hr)
+  (cond
+    (charging -1)
+    ((not linked) -2)
+    (stale -3)
+    ((and hr (not (= hr 0))) 9)
+    (else 0)))
