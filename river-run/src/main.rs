@@ -2,13 +2,14 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Result};
 use river_eval::sexp::Value;
-use river_run::{FakeHost, Runtime, SoilRecordsHost};
+use river_run::{FakeHost, Host, HostChain, Runtime, SoilRecordsHost, SystemTimeHost};
 
 fn main() -> Result<()> {
     let mut files: Vec<PathBuf> = Vec::new();
+    let mut prelude: Option<PathBuf> = None;
     let mut call: Option<String> = Some("main".to_string());
     let mut records_root: Option<PathBuf> = None;
-    let mut seed = false;
+    let mut book = "river".to_string();
     let mut args = std::env::args().skip(1);
 
     while let Some(arg) = args.next() {
@@ -20,16 +21,27 @@ fn main() -> Result<()> {
                 );
             }
             "--no-call" => call = None,
+            "--prelude" => {
+                prelude = Some(PathBuf::from(
+                    args.next()
+                        .ok_or_else(|| anyhow::anyhow!("--prelude needs a file"))?,
+                ));
+            }
             "--records-root" => {
                 records_root =
                     Some(PathBuf::from(args.next().ok_or_else(|| {
                         anyhow::anyhow!("--records-root needs a path")
                     })?));
             }
-            "--seed" => seed = true,
+            "--book" => {
+                book = args
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("--book needs a name"))?;
+            }
             "-h" | "--help" => {
                 println!(
-                    "usage: river-run [--call NAME | --no-call] [--records-root DIR] [--seed] FILE..."
+                    "usage: river-run [--call NAME | --no-call] [--prelude FILE] \
+                     [--records-root DIR] [--book NAME] FILE..."
                 );
                 return Ok(());
             }
@@ -37,26 +49,24 @@ fn main() -> Result<()> {
         }
     }
 
-    if files.is_empty() {
-        bail!("usage: river-run [--call NAME | --no-call] [--records-root DIR] [--seed] FILE...");
-    }
-    if seed && records_root.is_none() {
-        bail!("--seed requires --records-root");
+    if files.is_empty() && prelude.is_none() {
+        bail!(
+            "usage: river-run [--call NAME | --no-call] [--prelude FILE] \
+             [--records-root DIR] [--book NAME] FILE..."
+        );
     }
 
-    let host: Box<dyn river_run::Host> = if let Some(root) = records_root {
-        let mut host = SoilRecordsHost::open(&root)?;
-        if seed {
-            host.seed_instinct()?;
-        }
-        Box::new(host)
-    } else {
-        Box::new(FakeHost::new())
-    };
+    let mut hosts: Vec<Box<dyn Host>> = vec![Box::new(SystemTimeHost)];
+    match records_root {
+        Some(root) => hosts.push(Box::new(SoilRecordsHost::open(&root, book)?)),
+        None => hosts.push(Box::new(FakeHost::new())),
+    }
+    let mut runtime = Runtime::new(Box::new(HostChain::new(hosts)));
 
-    let mut runtime = Runtime::new(host);
+    if let Some(prelude) = prelude {
+        runtime.load_file(prelude)?;
+    }
     let mut last = Value::Nil;
-
     for file in files {
         last = runtime.load_file(&file)?;
     }

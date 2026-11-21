@@ -1,0 +1,99 @@
+; River prelude: generic list, JSON, records, and time helpers.
+; Domain policy (devices, signals, profiles) belongs above this file.
+
+(defun map (f xs)
+  (if (nil? xs)
+      nil
+      (cons (apply f (list (first xs))) (map f (rest xs)))))
+
+(defun filter (p xs)
+  (cond
+    ((nil? xs) nil)
+    ((apply p (list (first xs))) (cons (first xs) (filter p (rest xs))))
+    (else (filter p (rest xs)))))
+
+(defun any? (p xs)
+  (if (nil? xs)
+      #f
+      (if (apply p (list (first xs)))
+          #t
+          (any? p (rest xs)))))
+
+(defun all? (p xs)
+  (if (nil? xs)
+      #t
+      (if (apply p (list (first xs)))
+          (all? p (rest xs))
+          #f)))
+
+(defun find (p xs)
+  (cond
+    ((nil? xs) nil)
+    ((apply p (list (first xs))) (first xs))
+    (else (find p (rest xs)))))
+
+(defun take (n xs)
+  (if (or (<= n 0) (nil? xs))
+      nil
+      (cons (first xs) (take (- n 1) (rest xs)))))
+
+(defun drop (n xs)
+  (if (or (<= n 0) (nil? xs))
+      xs
+      (drop (- n 1) (rest xs))))
+
+(defun reverse-into (xs out)
+  (if (nil? xs)
+      out
+      (reverse-into (rest xs) (cons (first xs) out))))
+
+(defun reverse (xs)
+  (reverse-into xs nil))
+
+(defun json-get (value key)
+  (field value key))
+
+(defun json-get-in (value keys)
+  (if (nil? keys)
+      value
+      (json-get-in (field value (first keys)) (rest keys))))
+
+(defun page-entries (page)
+  (field page :entries))
+
+(defun entry-key (entry)
+  (field entry :key))
+
+(defun entry-id (entry)
+  (field (entry-key entry) :id))
+
+(defun entry-collection (entry)
+  (field (entry-key entry) :collection))
+
+(defun entry-schema (entry)
+  (field entry :schema))
+
+(defun entry-updated-at (entry)
+  (field entry :updated-at-ms))
+
+(defun entry-body (entry)
+  (json-decode (field entry :body)))
+
+(defun record-key (collection id)
+  (list (list :collection collection) (list :id id)))
+
+(defun make-entry (collection id schema body now)
+  (list
+    (list :key (record-key collection id))
+    (list :schema schema)
+    (list :revision 0)
+    (list :updated-at-ms now)
+    (list :origin "river")
+    (list :deleted #f)
+    (list :body (json-encode body))))
+
+(defun upsert-record (collection id schema body now)
+  (soil:records/upsert (make-entry collection id schema body now)))
+
+(defun now-ms ()
+  (field (value (soil:time/wall-clock)) :unix-ms))

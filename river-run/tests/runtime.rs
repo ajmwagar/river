@@ -54,7 +54,10 @@ fn evaluates_cond_and_strings() {
 
 #[test]
 fn calls_generated_records_stub_through_the_host() {
-    let mut runtime = runtime_with_records(FakeHost::new());
+    let mut host = FakeHost::new();
+    host.insert("signal:avery", "pine:1:hr", br#"{"bpm":61}"#);
+    host.insert("signal:avery", "pine:1:motion", br#"{"moving":true}"#);
+    let mut runtime = runtime_with_records(host);
     let result = runtime.call("main", &[]).expect("call main");
     assert_eq!(result, Value::Int(2));
 }
@@ -63,7 +66,7 @@ fn calls_generated_records_stub_through_the_host() {
 fn a_denied_capability_fails_before_the_host() {
     let mut runtime = runtime_with_records(FakeHost::new().deny_all());
     let error = runtime.call("main", &[]).expect_err("denied");
-    assert!(error.to_string().contains("denied"));
+    assert!(format!("{error:#}").contains("denied"));
 }
 
 #[test]
@@ -86,5 +89,5 @@ fn a_narrow_grant_only_allows_the_named_function() {
             r#"(soil:records/get (list (list :collection "signal:avery") (list :id "pine:1:hr")))"#,
         )
         .expect_err("get denied");
-    assert!(error.to_string().contains("denied"));
+    assert!(format!("{error:#}").contains("denied"));
 }

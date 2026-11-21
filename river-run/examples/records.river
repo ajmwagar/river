@@ -1,5 +1,4 @@
-;; Load the generated soil:records bindings first:
-;;   river-run ../river-wit/generated/soil-records.river examples/records.river
+; Count records in a collection through the generated soil:records stub.
 (defun main ()
   (let ((result (soil:records/scan "signal:avery" nil 50)))
     (if (ok? result)

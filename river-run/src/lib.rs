@@ -14,10 +14,13 @@ use anyhow::{anyhow, bail, Context, Result};
 use river_eval::sexp::{parse_all, Value};
 
 pub mod records_host;
+pub mod time_host;
 pub use records_host::SoilRecordsHost;
+pub use time_host::SystemTimeHost;
 
 #[derive(Clone)]
 struct Function {
+    name: String,
     params: Vec<String>,
     body: Vec<Value>,
 }
@@ -35,6 +38,39 @@ pub trait Host {
         function: &str,
         args: &[Value],
     ) -> std::result::Result<Value, String>;
+}
+
+/// Dispatch a `host-call` to the first host that grants it.
+pub struct HostChain {
+    hosts: Vec<Box<dyn Host>>,
+}
+
+impl HostChain {
+    pub fn new(hosts: Vec<Box<dyn Host>>) -> Self {
+        Self { hosts }
+    }
+}
+
+impl Host for HostChain {
+    fn granted(&self, interface: &str, function: &str) -> bool {
+        self.hosts
+            .iter()
+            .any(|host| host.granted(interface, function))
+    }
+
+    fn call(
+        &mut self,
+        interface: &str,
+        function: &str,
+        args: &[Value],
+    ) -> std::result::Result<Value, String> {
+        for host in &mut self.hosts {
+            if host.granted(interface, function) {
+                return host.call(interface, function, args);
+            }
+        }
+        Err(format!("no host grants {interface}/{function}"))
+    }
 }
 
 impl Runtime {
@@ -104,6 +140,7 @@ impl Runtime {
             env.insert(name.clone(), value);
         }
         self.eval_body(&function.body, &mut env)
+            .with_context(|| format!("in function `{}`", function.name))
     }
 
     fn eval_body(&mut self, body: &[Value], env: &mut HashMap<String, Value>) -> Result<Value> {
@@ -233,10 +270,66 @@ impl Runtime {
                     }
                     "rest" => {
                         let value = self.eval(require(items, 1, "rest")?, env)?;
-                        Ok(value
-                            .as_list()
-                            .map(|values| Value::List(values.iter().skip(1).cloned().collect()))
-                            .unwrap_or(Value::Nil))
+                        Ok(match value.as_list() {
+                            Some([_, values @ ..]) if !values.is_empty() => {
+                                Value::List(values.to_vec())
+                            }
+                            _ => Value::Nil,
+                        })
+                    }
+                    "cons" => {
+                        let head = self.eval(require(items, 1, "cons")?, env)?;
+                        let tail = self.eval(require(items, 2, "cons")?, env)?;
+                        match tail {
+                            Value::Nil => Ok(Value::List(vec![head])),
+                            Value::List(mut values) => {
+                                values.insert(0, head);
+                                Ok(Value::List(values))
+                            }
+                            _ => bail!("cons expects a list or nil as its second argument"),
+                        }
+                    }
+                    "append" => {
+                        let left = self.eval(require(items, 1, "append")?, env)?;
+                        let right = self.eval(require(items, 2, "append")?, env)?;
+                        let mut values = match left {
+                            Value::Nil => Vec::new(),
+                            Value::List(values) => values,
+                            _ => bail!("append expects lists"),
+                        };
+                        match right {
+                            Value::Nil => {}
+                            Value::List(items) => values.extend(items),
+                            _ => bail!("append expects lists"),
+                        }
+                        Ok(Value::List(values))
+                    }
+                    "apply" => {
+                        let function = self.eval(require(items, 1, "apply")?, env)?;
+                        let arguments = self.eval(require(items, 2, "apply")?, env)?;
+                        let name = value_text(&function);
+                        let arguments = match arguments {
+                            Value::Nil => Vec::new(),
+                            Value::List(values) => values,
+                            _ => bail!("apply expects a list of arguments"),
+                        };
+                        let function = self
+                            .functions
+                            .get(&name)
+                            .cloned()
+                            .ok_or_else(|| anyhow!("apply: unknown function `{name}`"))?;
+                        self.call_function(&function, arguments)
+                    }
+                    "string-contains?" => {
+                        let haystack = self.eval(require(items, 1, "string-contains?")?, env)?;
+                        let needle = self.eval(require(items, 2, "string-contains?")?, env)?;
+                        let Some(haystack) = haystack.as_str() else {
+                            bail!("string-contains? expects a string");
+                        };
+                        let Some(needle) = needle.as_str() else {
+                            bail!("string-contains? expects a string");
+                        };
+                        Ok(Value::Bool(haystack.contains(needle)))
                     }
                     "json-decode" => {
                         let value = self.eval(require(items, 1, "json-decode")?, env)?;
@@ -313,7 +406,7 @@ impl Runtime {
             let value = self.eval(
                 pair.get(1)
                     .ok_or_else(|| anyhow!("let binding needs a value"))?,
-                env,
+                &mut next,
             )?;
             next.insert(name.to_string(), value);
         }
@@ -525,7 +618,7 @@ fn parse_defun(list: &[Value]) -> Result<(String, Function)> {
     if body.is_empty() {
         bail!("defun needs a body");
     }
-    Ok((name, Function { params, body }))
+    Ok((name.clone(), Function { name, params, body }))
 }
 
 fn truthy(value: &Value) -> bool {
@@ -589,28 +682,19 @@ impl Default for FakeHost {
 
 impl FakeHost {
     pub fn new() -> Self {
-        let mut records = HashMap::new();
-        records.insert(
-            "signal:avery".to_string(),
-            vec![
-                record_value("signal:avery", "pine:1:hr", br#"{"bpm":61}"#),
-                record_value("signal:avery", "pine:1:motion", br#"{"moving":true}"#),
-            ],
-        );
-        records.insert(
-            "device:avery".to_string(),
-            vec![record_value(
-                "device:avery",
-                "pine:1",
-                br#"{"kind":"wearable.watch"}"#,
-            )],
-        );
-
         Self {
-            records,
+            records: HashMap::new(),
             allow_all: true,
             grants: Vec::new(),
         }
+    }
+
+    /// Add one record to the in-memory host. Test/demo data only.
+    pub fn insert(&mut self, collection: &str, id: &str, body: &[u8]) {
+        self.records
+            .entry(collection.to_string())
+            .or_default()
+            .push(record_value(collection, id, body));
     }
 
     pub fn deny_all(mut self) -> Self {

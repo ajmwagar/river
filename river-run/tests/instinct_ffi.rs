@@ -1,25 +1,38 @@
 use std::path::Path;
 
 use river_eval::sexp::Value;
-use river_run::{Runtime, SoilRecordsHost};
+use river_run::{HostChain, Runtime, SoilRecordsHost, SystemTimeHost};
 
 #[test]
-fn instinct_runs_on_the_in_process_records_host() {
+fn instinct_runs_as_river_over_the_records_wit() {
     let root = tempfile::tempdir().unwrap();
-    let mut host = SoilRecordsHost::open(root.path()).unwrap();
-    host.seed_instinct().unwrap();
-
+    let host = HostChain::new(vec![
+        Box::new(SystemTimeHost),
+        Box::new(SoilRecordsHost::open(root.path(), "river").unwrap()),
+    ]);
     let mut runtime = Runtime::new(Box::new(host));
-    let generated =
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../river-wit/generated/soil-records.river");
-    // Mirrors `instinct/main.river`; kept local so this test does not depend
-    // on a sibling checkout.
-    let main = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/instinct.river");
-    runtime.load_file(generated).unwrap();
-    runtime.load_file(main).unwrap();
 
-    assert_eq!(
-        runtime.call("main", &[]).unwrap(),
-        Value::String("worn".to_string())
-    );
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    runtime
+        .load_file(dir.join("../river-wit/generated/soil-records.river"))
+        .unwrap();
+    runtime
+        .load_file(dir.join("../river-wit/generated/soil-time.river"))
+        .unwrap();
+    runtime.load_file(dir.join("../prelude.river")).unwrap();
+    runtime
+        .load_file(dir.join("examples/seed_instinct.river"))
+        .unwrap();
+    runtime
+        .load_file(dir.join("examples/instinct.river"))
+        .unwrap();
+
+    let result = runtime.call("main", &[]).unwrap();
+    let text = result.to_string();
+    assert!(text.contains("(:worn 0.9)"), "{text}");
+    assert!(text.contains("(:worn 0.8)"), "{text}");
+    assert!(text.contains("(:worn 0.85)"), "{text}");
+    assert!(text.contains("(:in-use 0.85)"), "{text}");
+    assert!(text.contains("(:present 0.9)"), "{text}");
+    assert!(matches!(result, Value::List(_)));
 }

@@ -1,27 +1,111 @@
-; Instinct's first River entry point.
-; Reads device and signal records from the in-process soil:records host.
-; This is the simple classifier slice; the full profile/fusion program follows.
+; Instinct presence, written as River over soil:records.
+; Load after prelude.river (and seed_instinct.river for a fixture).
 
-(defun signal-kind? (signals kind)
+(defun signal-fresh? (signal device-id kind now ttl)
+  (let ((body (entry-body signal)))
+    (and (= (field body :source_device) device-id)
+         (= (field body :kind) kind)
+         (= (field (field body :quality) :state) "good")
+         (<= (- now (field body :observed_at)) ttl))))
+
+(defun any-signal? (signals device-id kind now ttl)
   (if (nil? signals)
       #f
-      (if (= (field (json-decode (field (first signals) :body)) :kind) kind)
+      (if (signal-fresh? (first signals) device-id kind now ttl)
           #t
-          (signal-kind? (rest signals) kind))))
+          (any-signal? (rest signals) device-id kind now ttl))))
 
-(defun classify (device signals)
-  (let ((body (json-decode (field device :body))))
+(defun stale-device? (body now)
+  (> (- now (field body :last_seen_ms)) 60000))
+
+(defun classify-body (device signals now)
+  (let ((body (entry-body device))
+        (id (entry-id device)))
     (cond
-      ((field body :charging) "docked")
-      ((not (= (field body :link) "connected")) "offline")
-      ((signal-kind? signals "body.hr.v1") "worn")
-      ((signal-kind? signals "body.motion.v1") "worn")
-      (else "present"))))
+      ((field body :charging) (list :docked 1.0))
+      ((not (= (field body :link) "connected")) (list :offline 0.0))
+      ((stale-device? body now) (list :unknown 0.0))
+      ((any-signal? signals id "body.hr.v1" now 120000) (list :worn 0.9))
+      ((any-signal? signals id "body.motion.v1" now 120000) (list :worn 0.8))
+      (else (list :unknown 0.2)))))
+
+(defun classify-omi (device signals now)
+  (let ((body (entry-body device))
+        (id (entry-id device)))
+    (cond
+      ((field body :charging) (list :docked 1.0))
+      ((not (= (field body :link) "connected")) (list :offline 0.0))
+      ((stale-device? body now) (list :unknown 0.0))
+      ((any-signal? signals id "device.button.v1" now 300000) (list :worn 0.85))
+      ((any-signal? signals id "audio.segment.v1" now 300000) (list :worn 0.8))
+      (else (list :present 0.5)))))
+
+(defun classify-az09 (device signals now)
+  (let ((body (entry-body device))
+        (id (entry-id device)))
+    (cond
+      ((field body :charging) (list :docked 1.0))
+      ((not (= (field body :link) "connected")) (list :offline 0.0))
+      ((stale-device? body now) (list :unknown 0.0))
+      ((any-signal? signals id "audio.segment.v1" now 60000) (list :in-use 0.85))
+      (else (list :present 0.5)))))
+
+(defun classify-device (device signals now)
+  (let ((body (entry-body device))
+        (text (str (field body :kind) " " (field body :model))))
+    (cond
+      ((or (string-contains? text "pine")
+           (string-contains? text "watch")
+           (string-contains? text "ring"))
+       (classify-body device signals now))
+      ((or (string-contains? text "omi")
+           (string-contains? text "pendant"))
+       (classify-omi device signals now))
+      ((or (string-contains? text "az09")
+           (string-contains? text "earbud"))
+       (classify-az09 device signals now))
+      (else (list :unknown 0.0)))))
+
+(defun classify-all (devices signals now)
+  (if (nil? devices)
+      nil
+      (cons
+        (list (entry-id (first devices))
+              (classify-device (first devices) signals now))
+        (classify-all (rest devices) signals now))))
+
+(defun state-weight (name)
+  (cond
+    ((= name :worn) 1.0)
+    ((= name :in-use) 0.6)
+    (else 0.0)))
+
+(defun state-of (entry)
+  (first (rest entry)))
+
+(defun best-score (states best)
+  (if (nil? states)
+      best
+      (let ((state (state-of (first states))))
+        (let ((score (* (state-weight (first state)) (first (rest state)))))
+          (if (> score best)
+              (best-score (rest states) score)
+              (best-score (rest states) best))))))
+
+(defun person-state (states)
+  (let ((score (best-score states 0.0)))
+    (if (> score 0.0)
+        (list :present score)
+        (list :unknown 0.0))))
 
 (defun main ()
-  (let ((devices (soil:records/scan "device:avery" nil 50))
-        (signals (soil:records/scan "signal:avery" nil 50)))
+  (let ((now (now-ms))
+        (devices (soil:records/scan "device:avery" nil 100))
+        (signals (soil:records/scan "signal:avery" nil 100)))
     (if (and (ok? devices) (ok? signals))
-        (classify (first (field (value devices) :entries))
-                  (field (value signals) :entries))
+        (let ((states (classify-all (page-entries (value devices))
+                                    (page-entries (value signals))
+                                    now)))
+          (list (list :devices states)
+                (list :person (person-state states))))
         "scan failed")))
