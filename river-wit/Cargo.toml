@@ -7,5 +7,4 @@ description = "WIT to S-expression bindings and the host capability bridge"
 
 [dependencies]
 anyhow = "1.0.104"
-river-eval = { path = "../river-eval" }
 wit-parser = "0.263.0"

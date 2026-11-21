@@ -11,6 +11,6 @@ cargo run -p river-wit -- ../../soil/wit/fungos-actions.wit --out generated/fung
 cargo run -p river-wit -- ../../soil/wit/soil-ble.wit --out generated/soil-ble.river
 ```
 
-These files are the readable surface. The machine-side catalog is built from
-the same WIT in `river_wit::generate`; the `.river` files exist so the agent can
-read, diff, and eventually load them into a Lisp environment.
+Each file contains type definitions, `define-capability` metadata, and `defun`
+stubs that call `(host-call interface function args)`. The host bridge owns
+grants and dispatch.

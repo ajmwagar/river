@@ -15,18 +15,36 @@
   (zone (option string))
 )
 
-(define-function soil:time/monotonic-ms
-  ()
-  -> (result u64 soil:time/error)
-  :grant "soil:time" :version "1.1.0")
+(define-capability soil:time/monotonic-ms
+  :interface "soil:time"
+  :function "monotonic-ms"
+  :grant "soil:time"
+  :version "1.1.0"
+  :params ()
+  :result (result u64 soil:time/error))
 
-(define-function soil:time/wall-clock
-  ()
-  -> (result soil:time/date-time soil:time/error)
-  :grant "soil:time" :version "1.1.0")
+(defun soil:time/monotonic-ms ()
+  (host-call "soil:time" "monotonic-ms" nil))
 
-(define-function soil:time/tick
-  ((timeout-ms u32))
-  -> (result (option u64) soil:time/error)
-  :grant "soil:time" :version "1.1.0")
+(define-capability soil:time/wall-clock
+  :interface "soil:time"
+  :function "wall-clock"
+  :grant "soil:time"
+  :version "1.1.0"
+  :params ()
+  :result (result soil:time/date-time soil:time/error))
+
+(defun soil:time/wall-clock ()
+  (host-call "soil:time" "wall-clock" nil))
+
+(define-capability soil:time/tick
+  :interface "soil:time"
+  :function "tick"
+  :grant "soil:time"
+  :version "1.1.0"
+  :params ((timeout-ms u32))
+  :result (result (option u64) soil:time/error))
+
+(defun soil:time/tick (timeout-ms)
+  (host-call "soil:time" "tick" (list timeout-ms)))
 

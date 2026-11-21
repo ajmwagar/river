@@ -1,12 +1,23 @@
 # river-wit
 
-WIT → S-expression bindings, a host capability bridge, and introspection.
+WIT → S-expression bindings.
 
-This is **not** `wit-bindgen` and it does not emit guest code. `wit-bindgen`
-generates guest bindings for supported languages (Rust, C, C++, C#, Go, …).
-River needs a different layer: parse WIT with `wit-parser`, emit readable
-S-expressions, build a capability catalog, and let a host-side Lisp/interpreter
-call the capabilities behind a grant check.
+The generated output is deliberately small:
+
+- type definitions,
+- capability metadata for introspection,
+- one `defun` stub per WIT function that calls a single generic host function.
+
+There is **no runtime catalog**, **no per-capability host adapter**, and **no
+`wit-bindgen` dependency**. `wit-parser` reads the WIT at generation time; the
+host owns grants and dispatch at runtime.
+
+## Why not `wit-bindgen`
+
+`wit-bindgen` generates guest bindings for Rust, C, C++, C#, Go, and so on. It
+has no Lisp backend, and River needs a different boundary: generated Lisp stubs
+that call the Soil host through the existing generic call surface. `wit-parser`
+is the reusable part.
 
 ## Generate
 
@@ -17,89 +28,85 @@ cargo run -p river-wit -- ../../soil/wit/soil-records.wit --out generated/soil-r
 Output:
 
 ```lisp
-(define-package "soil:records@0.1.0" :base "soil:records" :version "0.1.0")
-
 (define-record soil:records/entry
   (key soil:records/key)
   (schema string)
+  (revision u64)
   ...
 )
 
-(define-function soil:records/scan
-  ((collection string) (cursor (option string)) (limit u32))
-  -> (result soil:records/page soil:records/error)
-  :grant "soil:records" :version "0.1.0")
+(define-capability soil:records/scan
+  :interface "soil:records"
+  :function "scan"
+  :grant "soil:records"
+  :version "0.1.0"
+  :params ((collection string) (cursor (option string)) (limit u32))
+  :result (result soil:records/page soil:records/error))
+
+(defun soil:records/scan (collection cursor limit)
+  (host-call "soil:records" "scan" (list collection cursor limit)))
 ```
 
-Generated files in [`generated/`](generated) cover the first capability set:
-records, unibus, time, principal, actions, and BLE.
+`define-capability` is introspection data. `defun` is the callable stub.
 
-## Host bridge
+## The host call
 
-```rust
-let generated = river_wit::generate("../../soil/wit/soil-records.wit")?;
-let result = generated.catalog.call(
-    &mut host,                         // Host trait
-    "soil:records/scan",
-    &[Value::String("signal:avery".into()), Value::Nil, Value::Int(50)],
-)?;
+The Lisp runtime provides exactly one function:
+
+```lisp
+(host-call interface function args)
 ```
 
-`Catalog::call` checks:
+It maps to the Soil host surface:
 
-1. the capability exists,
-2. the host grants it,
-3. arity matches,
-4. basic argument types match,
+```http
+POST /v1/call
+{"interface":"soil:records","function":"scan","params":{...}}
+```
 
-then calls the host. The host owns the real side effect and the actual grant
-policy; the catalog is a projection, not an authority.
+or, in a host-embedded Lisp, to the same `__soil.invoke` boundary the Lua SDK
+uses. The host checks the Spore manifest's grants before dispatch. The generated
+Lisp contains no authority.
 
-A Lisp-shaped form goes through the same path:
+A script can therefore do:
 
 ```lisp
 (soil:records/scan "signal:avery" nil 50)
-```
-
-```rust
-river_wit::call_form(&catalog, &mut host, &form)?;
+;; =>
+(host-call "soil:records" "scan" (list "signal:avery" nil 50))
 ```
 
 ## Introspection
 
-`river_wit::eval_form` answers questions about the generated surface as data:
+Because `define-capability` is data, the Lisp side can answer:
 
 ```lisp
-(capabilities)
-(grants)
-(interfaces)
-(types)
-(describe "soil:records/scan")
+(capabilities)                 ; names
+(grants)                       ; grants referenced by the generated forms
+(describe "soil:records/scan") ; the whole capability form
 ```
 
-`describe` returns a tagged list with `:signature`, `:grant`, `:version`,
-`:params`, and `:result`. That is the same S-expression world the agent can
-feed back into the next decision.
+Those are ordinary list operations over the generated document. No Rust catalog
+is involved.
 
-## What this does and does not unlock
+## What this unlocks
 
-**Today:** host-side Lisp capability scripts. The generated symbols are
-ordinary forms; the Rust host executes them through the bridge. This is enough
-to write River/Instinct logic against real WIT contracts.
+**Host-side Lisp capability scripts: yes.** Generate the bindings, load them in
+the Lisp environment, and call the host through the bridge. The host is the
+runtime; the script is the program; WIT is the API.
 
-**Not yet:** a signed Wasm Spore whose engine is Lisp. That needs a host profile
-that embeds a Lisp runtime (`[engine].target = "lisp"` or similar), or a
-guest-side Compenent Model backend with canonical-ABI lifting/lowering. This
-crate deliberately stops at the host boundary.
+**Signed Wasm Spores with a Lisp engine: not yet.** That needs a host profile
+that embeds Lisp (`[engine].target = "lisp"`) or a guest-side Component Model
+backend. This crate deliberately stops at the host call.
 
 ## Limits
 
-- Resources, handles, futures, streams, maps, and fixed-length lists are
-  emitted as `(define-unsupported …)`; they need lifetime/ownership design.
-- Argument validation is basic (arity + primitives/lists/options/results).
-  Named-type validation needs catalog-aware checking.
+- Resources, handles, futures, streams, maps, and fixed-length lists are emitted
+  as `(define-unsupported …)`.
+- Type definitions and capability metadata are emitted; full schema validation
+  and grant-scoped generation are next.
 - One package per invocation. Multi-package dependency graphs are next.
-- The generator is not a substitute for `wit-bindgen` on guest targets.
+- `host-call` is a contract, not an implementation. The runtime provides it.
 
 ## Test
 

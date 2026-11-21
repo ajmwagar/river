@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, Result};
-use river_wit::generate::generate;
+use river_wit::generate;
 
 fn main() -> Result<()> {
     let mut input: Option<PathBuf> = None;
@@ -37,9 +37,9 @@ fn main() -> Result<()> {
         std::fs::write(&path, &generated.sexp)?;
         eprintln!(
             "wrote {} ({} capabilities, {} types) to {}",
-            generated.catalog.package,
-            generated.catalog.capabilities.len(),
-            generated.catalog.types.len(),
+            generated.package,
+            generated.capabilities,
+            generated.types,
             path.display()
         );
     } else {

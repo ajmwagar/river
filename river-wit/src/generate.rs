@@ -1,20 +1,113 @@
 //! WIT -> S-expression bindings.
 //!
-//! This is deliberately not `wit-bindgen`: there is no guest codegen and no
-//! canonical ABI here. It parses WIT, emits readable S-expressions, and builds
-//! the catalog the host bridge and introspection use.
+//! The output is deliberately small:
+//! - type definitions,
+//! - capability metadata for introspection,
+//! - one `defun` stub per function that calls `(host-call interface function args)`.
+//!
+//! There is no runtime catalog and no per-capability host adapter. The host
+//! (the Soil web bridge at `/v1/call`, or a host-embedded `__soil.invoke`)
+//! owns grants and dispatch.
 
+use std::fmt;
 use std::fmt::Write as _;
 use std::path::Path;
 
 use anyhow::Result;
 use wit_parser::{Resolve, Type, TypeDefKind};
 
-use crate::catalog::{Capability, Catalog, Field, TypeDefinition, TypeKind, TypeRef, VariantCase};
-
 pub struct Generated {
-    pub catalog: Catalog,
+    pub package: String,
     pub sexp: String,
+    pub capabilities: usize,
+    pub types: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TypeRef {
+    Primitive(String),
+    Named(String),
+    List(Box<TypeRef>),
+    Option(Box<TypeRef>),
+    Result { ok: Box<TypeRef>, err: Box<TypeRef> },
+    Tuple(Vec<TypeRef>),
+    Record(Vec<Field>),
+    Variant(Vec<VariantCase>),
+    Enum(Vec<String>),
+    Flags(Vec<String>),
+    Unsupported(String),
+}
+
+impl fmt::Display for TypeRef {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Primitive(name) | Self::Named(name) => write!(formatter, "{name}"),
+            Self::List(inner) => write!(formatter, "(list {inner})"),
+            Self::Option(inner) => write!(formatter, "(option {inner})"),
+            Self::Result { ok, err } => write!(formatter, "(result {ok} {err})"),
+            Self::Tuple(items) => {
+                write!(formatter, "(tuple")?;
+                for item in items {
+                    write!(formatter, " {item}")?;
+                }
+                write!(formatter, ")")
+            }
+            Self::Record(fields) => {
+                write!(formatter, "(record")?;
+                for field in fields {
+                    write!(formatter, " ({} {})", field.name, field.ty)?;
+                }
+                write!(formatter, ")")
+            }
+            Self::Variant(cases) => {
+                write!(formatter, "(variant")?;
+                for case in cases {
+                    match &case.ty {
+                        Some(ty) => write!(formatter, " ({} {ty})", case.name)?,
+                        None => write!(formatter, " ({})", case.name)?,
+                    }
+                }
+                write!(formatter, ")")
+            }
+            Self::Enum(cases) => {
+                write!(formatter, "(enum")?;
+                for case in cases {
+                    write!(formatter, " {case}")?;
+                }
+                write!(formatter, ")")
+            }
+            Self::Flags(flags) => {
+                write!(formatter, "(flags")?;
+                for flag in flags {
+                    write!(formatter, " {flag}")?;
+                }
+                write!(formatter, ")")
+            }
+            Self::Unsupported(reason) => write!(formatter, "(unsupported {reason:?})"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct Field {
+    name: String,
+    ty: TypeRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct VariantCase {
+    name: String,
+    ty: Option<TypeRef>,
+}
+
+enum TypeForm {
+    Record(Vec<Field>),
+    Variant(Vec<VariantCase>),
+    Enum(Vec<String>),
+    Flags(Vec<String>),
+    Alias(TypeRef),
+    Resource,
+    Unsupported(String),
 }
 
 pub fn generate(path: impl AsRef<Path>) -> Result<Generated> {
@@ -31,8 +124,9 @@ pub fn generate(path: impl AsRef<Path>) -> Result<Generated> {
         .map(ToString::to_string)
         .unwrap_or_default();
 
-    let mut catalog = Catalog::new(package_full.clone(), version.clone());
     let mut sexp = String::new();
+    let mut capabilities = 0;
+    let mut types = 0;
 
     let _ = writeln!(
         sexp,
@@ -49,12 +143,9 @@ pub fn generate(path: impl AsRef<Path>) -> Result<Generated> {
         for (type_name, type_id) in &interface.types {
             let type_def = &resolve.types[*type_id];
             let full_name = scoped_name(&base, &interface_name, type_name);
-            let kind = type_kind(&resolve, &type_def.kind, &base, &interface_name);
-            write_type(&mut sexp, &full_name, &kind);
-            catalog.push_type(TypeDefinition {
-                name: full_name,
-                kind,
-            });
+            let form = type_form(&resolve, &type_def.kind, &base, &interface_name);
+            write_type(&mut sexp, &full_name, &form);
+            types += 1;
         }
 
         for (function_name, function) in &interface.functions {
@@ -78,35 +169,77 @@ pub fn generate(path: impl AsRef<Path>) -> Result<Generated> {
                 .result
                 .map(|ty| type_ref(&resolve, ty, &base, &interface_name));
 
-            let params_text = params
-                .iter()
-                .map(|param| format!("({} {})", param.name, param.ty))
-                .collect::<Vec<_>>()
-                .join(" ");
-            let result_text = result
-                .as_ref()
-                .map(ToString::to_string)
-                .unwrap_or_else(|| "unit".to_string());
-
-            let _ = writeln!(sexp, "(define-function {capability_name}");
-            let _ = writeln!(sexp, "  ({params_text})");
-            let _ = writeln!(sexp, "  -> {result_text}");
-            let _ = writeln!(sexp, "  :grant {base:?} :version {version:?})\n");
-
-            catalog.push_capability(Capability {
-                name: capability_name,
-                package: package_full.clone(),
-                interface: interface_name.clone(),
-                function: function_name.clone(),
-                grant: base.clone(),
-                version: version.clone(),
-                params,
-                result,
-            });
+            write_capability(
+                &mut sexp,
+                &capability_name,
+                &base,
+                function_name,
+                &base,
+                &version,
+                &params,
+                result.as_ref(),
+            );
+            write_stub(&mut sexp, &capability_name, &base, function_name, &params);
+            capabilities += 1;
         }
     }
 
-    Ok(Generated { catalog, sexp })
+    Ok(Generated {
+        package: package_full,
+        sexp,
+        capabilities,
+        types,
+    })
+}
+
+fn write_capability(
+    sexp: &mut String,
+    capability_name: &str,
+    interface: &str,
+    function: &str,
+    grant: &str,
+    version: &str,
+    params: &[Field],
+    result: Option<&TypeRef>,
+) {
+    let params_text = params
+        .iter()
+        .map(|param| format!("({} {})", param.name, param.ty))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let result_text = result
+        .map(ToString::to_string)
+        .unwrap_or_else(|| "unit".to_string());
+
+    let _ = writeln!(sexp, "(define-capability {capability_name}");
+    let _ = writeln!(sexp, "  :interface {interface:?}");
+    let _ = writeln!(sexp, "  :function {function:?}");
+    let _ = writeln!(sexp, "  :grant {grant:?}");
+    let _ = writeln!(sexp, "  :version {version:?}");
+    let _ = writeln!(sexp, "  :params ({params_text})");
+    let _ = writeln!(sexp, "  :result {result_text})\n");
+}
+
+fn write_stub(
+    sexp: &mut String,
+    capability_name: &str,
+    interface: &str,
+    function: &str,
+    params: &[Field],
+) {
+    let names = params
+        .iter()
+        .map(|param| param.name.clone())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let args = if names.is_empty() {
+        "nil".to_string()
+    } else {
+        format!("(list {names})")
+    };
+
+    let _ = writeln!(sexp, "(defun {capability_name} ({names})");
+    let _ = writeln!(sexp, "  (host-call {interface:?} {function:?} {args}))\n");
 }
 
 fn scoped_name(base: &str, interface: &str, name: &str) -> String {
@@ -211,9 +344,9 @@ fn option_type_ref(resolve: &Resolve, ty: Option<Type>, base: &str, interface: &
     }
 }
 
-fn type_kind(resolve: &Resolve, kind: &TypeDefKind, base: &str, interface: &str) -> TypeKind {
+fn type_form(resolve: &Resolve, kind: &TypeDefKind, base: &str, interface: &str) -> TypeForm {
     match kind {
-        TypeDefKind::Record(record) => TypeKind::Record(
+        TypeDefKind::Record(record) => TypeForm::Record(
             record
                 .fields
                 .iter()
@@ -223,7 +356,7 @@ fn type_kind(resolve: &Resolve, kind: &TypeDefKind, base: &str, interface: &str)
                 })
                 .collect(),
         ),
-        TypeDefKind::Variant(variant) => TypeKind::Variant(
+        TypeDefKind::Variant(variant) => TypeForm::Variant(
             variant
                 .cases
                 .iter()
@@ -233,7 +366,7 @@ fn type_kind(resolve: &Resolve, kind: &TypeDefKind, base: &str, interface: &str)
                 })
                 .collect(),
         ),
-        TypeDefKind::Enum(enumeration) => TypeKind::Enum(
+        TypeDefKind::Enum(enumeration) => TypeForm::Enum(
             enumeration
                 .cases
                 .iter()
@@ -241,48 +374,48 @@ fn type_kind(resolve: &Resolve, kind: &TypeDefKind, base: &str, interface: &str)
                 .collect(),
         ),
         TypeDefKind::Flags(flags) => {
-            TypeKind::Flags(flags.flags.iter().map(|flag| flag.name.clone()).collect())
+            TypeForm::Flags(flags.flags.iter().map(|flag| flag.name.clone()).collect())
         }
-        TypeDefKind::Type(inner) => TypeKind::Alias(type_ref(resolve, *inner, base, interface)),
-        TypeDefKind::Tuple(tuple) => TypeKind::Alias(TypeRef::Tuple(
+        TypeDefKind::Type(inner) => TypeForm::Alias(type_ref(resolve, *inner, base, interface)),
+        TypeDefKind::Tuple(tuple) => TypeForm::Alias(TypeRef::Tuple(
             tuple
                 .types
                 .iter()
                 .map(|ty| type_ref(resolve, *ty, base, interface))
                 .collect(),
         )),
-        TypeDefKind::Option(inner) => TypeKind::Alias(TypeRef::Option(Box::new(type_ref(
+        TypeDefKind::Option(inner) => TypeForm::Alias(TypeRef::Option(Box::new(type_ref(
             resolve, *inner, base, interface,
         )))),
-        TypeDefKind::Result(result) => TypeKind::Alias(TypeRef::Result {
+        TypeDefKind::Result(result) => TypeForm::Alias(TypeRef::Result {
             ok: Box::new(option_type_ref(resolve, result.ok, base, interface)),
             err: Box::new(option_type_ref(resolve, result.err, base, interface)),
         }),
-        TypeDefKind::List(inner) => TypeKind::Alias(TypeRef::List(Box::new(type_ref(
+        TypeDefKind::List(inner) => TypeForm::Alias(TypeRef::List(Box::new(type_ref(
             resolve, *inner, base, interface,
         )))),
-        TypeDefKind::Resource => TypeKind::Resource,
-        TypeDefKind::Handle(_) => TypeKind::Unsupported("handle".to_string()),
-        TypeDefKind::Map(_, _) => TypeKind::Unsupported("map".to_string()),
+        TypeDefKind::Resource => TypeForm::Resource,
+        TypeDefKind::Handle(_) => TypeForm::Unsupported("handle".to_string()),
+        TypeDefKind::Map(_, _) => TypeForm::Unsupported("map".to_string()),
         TypeDefKind::FixedLengthList(_, _) => {
-            TypeKind::Unsupported("fixed-length-list".to_string())
+            TypeForm::Unsupported("fixed-length-list".to_string())
         }
-        TypeDefKind::Future(_) => TypeKind::Unsupported("future".to_string()),
-        TypeDefKind::Stream(_) => TypeKind::Unsupported("stream".to_string()),
-        _ => TypeKind::Unsupported("unknown".to_string()),
+        TypeDefKind::Future(_) => TypeForm::Unsupported("future".to_string()),
+        TypeDefKind::Stream(_) => TypeForm::Unsupported("stream".to_string()),
+        _ => TypeForm::Unsupported("unknown".to_string()),
     }
 }
 
-fn write_type(sexp: &mut String, name: &str, kind: &TypeKind) {
-    match kind {
-        TypeKind::Record(fields) => {
+fn write_type(sexp: &mut String, name: &str, form: &TypeForm) {
+    match form {
+        TypeForm::Record(fields) => {
             let _ = writeln!(sexp, "(define-record {name}");
             for field in fields {
                 let _ = writeln!(sexp, "  ({} {})", field.name, field.ty);
             }
             let _ = writeln!(sexp, ")\n");
         }
-        TypeKind::Variant(cases) => {
+        TypeForm::Variant(cases) => {
             let _ = writeln!(sexp, "(define-variant {name}");
             for case in cases {
                 match &case.ty {
@@ -296,21 +429,21 @@ fn write_type(sexp: &mut String, name: &str, kind: &TypeKind) {
             }
             let _ = writeln!(sexp, ")\n");
         }
-        TypeKind::Enum(cases) => {
+        TypeForm::Enum(cases) => {
             let _ = writeln!(sexp, "(define-enum {name} {})", cases.join(" "));
             let _ = writeln!(sexp);
         }
-        TypeKind::Flags(flags) => {
+        TypeForm::Flags(flags) => {
             let _ = writeln!(sexp, "(define-flags {name} {})", flags.join(" "));
             let _ = writeln!(sexp);
         }
-        TypeKind::Alias(ty) => {
+        TypeForm::Alias(ty) => {
             let _ = writeln!(sexp, "(define-alias {name} {ty})\n");
         }
-        TypeKind::Resource => {
+        TypeForm::Resource => {
             let _ = writeln!(sexp, "(define-resource {name})\n");
         }
-        TypeKind::Unsupported(reason) => {
+        TypeForm::Unsupported(reason) => {
             let _ = writeln!(sexp, "(define-unsupported {name} {reason:?})\n");
         }
     }

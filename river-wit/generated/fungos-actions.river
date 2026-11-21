@@ -37,15 +37,27 @@
 
 (define-enum fungos:actions/error denied unknown-action unsupported-version invalid approval-required unsafe-retry over-budget unavailable io)
 
-(define-function fungos:actions/catalog
-  ()
-  -> (result (list fungos:actions/descriptor) fungos:actions/error)
-  :grant "fungos:actions" :version "1.0.0")
+(define-capability fungos:actions/catalog
+  :interface "fungos:actions"
+  :function "catalog"
+  :grant "fungos:actions"
+  :version "1.0.0"
+  :params ()
+  :result (result (list fungos:actions/descriptor) fungos:actions/error))
 
-(define-function fungos:actions/invoke
-  ((call fungos:actions/call))
-  -> (result fungos:actions/receipt fungos:actions/error)
-  :grant "fungos:actions" :version "1.0.0")
+(defun fungos:actions/catalog ()
+  (host-call "fungos:actions" "catalog" nil))
+
+(define-capability fungos:actions/invoke
+  :interface "fungos:actions"
+  :function "invoke"
+  :grant "fungos:actions"
+  :version "1.0.0"
+  :params ((call fungos:actions/call))
+  :result (result fungos:actions/receipt fungos:actions/error))
+
+(defun fungos:actions/invoke (call)
+  (host-call "fungos:actions" "invoke" (list call)))
 
 (define-alias fungos:actions/catalog.approval fungos:actions/catalog.approval)
 
@@ -73,8 +85,14 @@
   (state-revision (option string))
 )
 
-(define-function fungos:actions/catalog.list-actions
-  ()
-  -> (result (list fungos:actions/catalog.action) fungos:actions/catalog.error)
-  :grant "fungos:actions" :version "1.0.0")
+(define-capability fungos:actions/catalog.list-actions
+  :interface "fungos:actions"
+  :function "list-actions"
+  :grant "fungos:actions"
+  :version "1.0.0"
+  :params ()
+  :result (result (list fungos:actions/catalog.action) fungos:actions/catalog.error))
+
+(defun fungos:actions/catalog.list-actions ()
+  (host-call "fungos:actions" "list-actions" nil))
 

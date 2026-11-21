@@ -21,13 +21,25 @@
   (generation u64)
 )
 
-(define-function soil:principal/current
-  ()
-  -> (result soil:principal/identity soil:principal/error)
-  :grant "soil:principal" :version "0.1.0")
+(define-capability soil:principal/current
+  :interface "soil:principal"
+  :function "current"
+  :grant "soil:principal"
+  :version "0.1.0"
+  :params ()
+  :result (result soil:principal/identity soil:principal/error))
 
-(define-function soil:principal/signing-key
-  ()
-  -> (result (option soil:principal/signing-key-info) soil:principal/error)
-  :grant "soil:principal" :version "0.1.0")
+(defun soil:principal/current ()
+  (host-call "soil:principal" "current" nil))
+
+(define-capability soil:principal/signing-key
+  :interface "soil:principal"
+  :function "signing-key"
+  :grant "soil:principal"
+  :version "0.1.0"
+  :params ()
+  :result (result (option soil:principal/signing-key-info) soil:principal/error))
+
+(defun soil:principal/signing-key ()
+  (host-call "soil:principal" "signing-key" nil))
 
