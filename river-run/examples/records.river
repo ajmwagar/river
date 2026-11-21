@@ -1,0 +1,8 @@
+;; Load the generated soil:records bindings first:
+;;   river-run ../river-wit/generated/soil-records.river examples/records.river
+(defun main ()
+  (let ((result (soil:records/scan "signal:avery" nil 50)))
+    (if (ok? result)
+        (let ((page (value result)))
+          (println (str "records: " (length (field page :entries)))))
+        (println (str "error: " (value result))))))

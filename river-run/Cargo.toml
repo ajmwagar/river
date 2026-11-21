@@ -1,0 +1,10 @@
+[package]
+name = "river-run"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "A small closed evaluator and CLI for River S-expressions"
+
+[dependencies]
+anyhow = "1"
+river-eval = { path = "../river-eval" }

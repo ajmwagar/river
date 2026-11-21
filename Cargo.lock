@@ -106,6 +106,14 @@ name = "river-rt"
 version = "0.1.0"
 
 [[package]]
+name = "river-run"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "river-eval",
+]
+
+[[package]]
 name = "river-std"
 version = "0.1.0"
 
