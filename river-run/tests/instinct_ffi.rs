@@ -12,7 +12,9 @@ fn instinct_runs_on_the_in_process_records_host() {
     let mut runtime = Runtime::new(Box::new(host));
     let generated =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../river-wit/generated/soil-records.river");
-    let main = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../wearables/instinct/main.river");
+    // Mirrors `instinct/main.river`; kept local so this test does not depend
+    // on a sibling checkout.
+    let main = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/instinct.river");
     runtime.load_file(generated).unwrap();
     runtime.load_file(main).unwrap();
 
