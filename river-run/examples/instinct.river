@@ -1,0 +1,27 @@
+; Instinct's first River entry point.
+; Reads device and signal records from the in-process soil:records host.
+; This is the simple classifier slice; the full profile/fusion program follows.
+
+(defun signal-kind? (signals kind)
+  (if (nil? signals)
+      #f
+      (if (= (field (json-decode (field (first signals) :body)) :kind) kind)
+          #t
+          (signal-kind? (rest signals) kind))))
+
+(defun classify (device signals)
+  (let ((body (json-decode (field device :body))))
+    (cond
+      ((field body :charging) "docked")
+      ((not (= (field body :link) "connected")) "offline")
+      ((signal-kind? signals "body.hr.v1") "worn")
+      ((signal-kind? signals "body.motion.v1") "worn")
+      (else "present"))))
+
+(defun main ()
+  (let ((devices (soil:records/scan "device:avery" nil 50))
+        (signals (soil:records/scan "signal:avery" nil 50)))
+    (if (and (ok? devices) (ok? signals))
+        (classify (first (field (value devices) :entries))
+                  (field (value signals) :entries))
+        "scan failed")))

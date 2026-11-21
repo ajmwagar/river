@@ -13,6 +13,9 @@ use std::path::Path;
 use anyhow::{anyhow, bail, Context, Result};
 use river_eval::sexp::{parse_all, Value};
 
+pub mod records_host;
+pub use records_host::SoilRecordsHost;
+
 #[derive(Clone)]
 struct Function {
     params: Vec<String>,
@@ -235,6 +238,20 @@ impl Runtime {
                             .map(|values| Value::List(values.iter().skip(1).cloned().collect()))
                             .unwrap_or(Value::Nil))
                     }
+                    "json-decode" => {
+                        let value = self.eval(require(items, 1, "json-decode")?, env)?;
+                        let bytes = value_bytes(&value)?;
+                        let json: serde_json::Value = serde_json::from_slice(&bytes)
+                            .with_context(|| "invalid JSON in json-decode")?;
+                        Ok(json_to_value(&json))
+                    }
+                    "json-encode" => {
+                        let value = self.eval(require(items, 1, "json-encode")?, env)?;
+                        Ok(Value::String(
+                            serde_json::to_string(&value_to_json(&value))
+                                .with_context(|| "json-encode failed")?,
+                        ))
+                    }
                     "+" | "-" | "*" | "/" => self.eval_arithmetic(head, &items[1..], env),
                     "=" | ">" | "<" | ">=" | "<=" => self.eval_comparison(head, &items[1..], env),
                     name if self.functions.contains_key(name) => {
@@ -409,6 +426,74 @@ impl Runtime {
         };
 
         Ok(Value::Bool(result))
+    }
+}
+
+fn value_bytes(value: &Value) -> Result<Vec<u8>> {
+    match value {
+        Value::List(items) => items
+            .iter()
+            .map(|item| match item {
+                Value::Int(byte) if (0..=255).contains(byte) => Ok(*byte as u8),
+                _ => bail!("body must be a list of bytes"),
+            })
+            .collect(),
+        Value::String(text) => Ok(text.as_bytes().to_vec()),
+        _ => bail!("body must be a list of bytes or a string"),
+    }
+}
+
+fn json_to_value(json: &serde_json::Value) -> Value {
+    match json {
+        serde_json::Value::Null => Value::Nil,
+        serde_json::Value::Bool(value) => Value::Bool(*value),
+        serde_json::Value::Number(number) => number
+            .as_i64()
+            .map(Value::Int)
+            .or_else(|| number.as_f64().map(Value::Float))
+            .unwrap_or(Value::Nil),
+        serde_json::Value::String(text) => Value::String(text.clone()),
+        serde_json::Value::Array(items) => Value::List(items.iter().map(json_to_value).collect()),
+        serde_json::Value::Object(object) => Value::List(
+            object
+                .iter()
+                .map(|(key, value)| pair(key, json_to_value(value)))
+                .collect(),
+        ),
+    }
+}
+
+fn value_to_json(value: &Value) -> serde_json::Value {
+    match value {
+        Value::Nil => serde_json::Value::Null,
+        Value::Bool(value) => serde_json::Value::Bool(*value),
+        Value::Int(value) => serde_json::Value::Number((*value).into()),
+        Value::Float(value) => serde_json::Number::from_f64(*value)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        Value::String(text) | Value::Symbol(text) | Value::Keyword(text) => {
+            serde_json::Value::String(text.clone())
+        }
+        Value::List(items) => {
+            let is_object = items.iter().all(|item| {
+                item.as_list().is_some_and(|pair| {
+                    pair.len() == 2 && pair.first().and_then(Value::as_keyword).is_some()
+                })
+            });
+            if is_object && !items.is_empty() {
+                let mut object = serde_json::Map::new();
+                for item in items {
+                    let pair = item.as_list().unwrap();
+                    object.insert(
+                        pair[0].as_keyword().unwrap().to_string(),
+                        value_to_json(&pair[1]),
+                    );
+                }
+                serde_json::Value::Object(object)
+            } else {
+                serde_json::Value::Array(items.iter().map(value_to_json).collect())
+            }
+        }
     }
 }
 

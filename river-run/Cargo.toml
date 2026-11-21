@@ -7,4 +7,9 @@ description = "A small closed evaluator and CLI for River S-expressions"
 
 [dependencies]
 anyhow = "1"
+fungos-records = { path = "../../records" }
 river-eval = { path = "../river-eval" }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
